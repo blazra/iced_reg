@@ -1,9 +1,10 @@
 use iced::theme::Theme;
-use iced::widget::{column, container};
+use iced::widget::{container, Row};
 use iced::{
-    executor, futures::channel::mpsc, subscription, Application, Command, Element, Length,
+    executor, futures::channel::mpsc, subscription, Application, Command, Element,
     Settings, Subscription,
 };
+use std::collections::BTreeMap;
 use std::{thread, time};
 
 use iced_reg::{register, Field};
@@ -94,10 +95,17 @@ fn bg_worker() -> Subscription<Event> {
     )
 }
 
+struct Reg {
+    name: &'static str,
+    address: u16,
+    read_value: u16,
+    write_value: u16,
+    fields: &'static [Field],
+}
+
 struct RegApp {
-    read_reg_value: u16,
-    write_reg_value: u16,
     state: SenderState,
+    reg_map: BTreeMap<u16, Reg>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,10 +124,87 @@ impl Application for RegApp {
     type Theme = Theme;
 
     fn new(_flags: ()) -> (RegApp, Command<Message>) {
+        let reg_map = BTreeMap::from([
+            (
+                0x00,
+                Reg {
+                    name: "REG_1",
+                    address: 0,
+                    read_value: 0,
+                    write_value: 0,
+                    fields: &[
+                        Field {
+                            name: "Field A",
+                            width: 8,
+                        },
+                        Field {
+                            name: "Field B",
+                            width: 8,
+                        },
+                    ],
+                },
+            ),
+            (
+                0x01,
+                Reg {
+                    name: "REG_2",
+                    address: 1,
+                    read_value: 0,
+                    write_value: 0,
+                    fields: &[
+                        Field {
+                            name: "Field A",
+                            width: 8,
+                        },
+                        Field {
+                            name: "Field B",
+                            width: 8,
+                        },
+                    ],
+                },
+            ),
+            (
+                0x02,
+                Reg {
+                    name: "REG_3",
+                    address: 2,
+                    read_value: 0,
+                    write_value: 0,
+                    fields: &[
+                        Field {
+                            name: "Field A",
+                            width: 8,
+                        },
+                        Field {
+                            name: "Field B",
+                            width: 8,
+                        },
+                    ],
+                },
+            ),
+            (
+                0x03,
+                Reg {
+                    name: "REG_4",
+                    address: 3,
+                    read_value: 0,
+                    write_value: 0,
+                    fields: &[
+                        Field {
+                            name: "Field A",
+                            width: 8,
+                        },
+                        Field {
+                            name: "Field B",
+                            width: 8,
+                        },
+                    ],
+                },
+            ),
+        ]);
         let reg = RegApp {
-            read_reg_value: 0x00AA,
-            write_reg_value: 7,
             state: SenderState::default(),
+            reg_map,
         };
         (reg, Command::none())
     }
@@ -130,14 +215,14 @@ impl Application for RegApp {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::RegReadValChanged(address, value) => self.read_reg_value = value,
-            Message::RegWriteValChanged(address, value) => self.write_reg_value = value,
+            Message::RegReadValChanged(address, value) => self.reg_map.get_mut(&address).unwrap().read_value = value,
+            Message::RegWriteValChanged(address, value) => self.reg_map.get_mut(&address).unwrap().write_value = value,
             Message::RegRead(address) => match &mut self.state {
                 SenderState::Starting => {
                     println!("Error: trying to read register, but we are not connected")
                 }
                 SenderState::Ready(sender) => sender
-                    .try_send(WorkerInput::ReadReg(0x3))
+                    .try_send(WorkerInput::ReadReg(address))
                     .expect("Send msg to background worker"),
             },
             Message::RegWrite(address) => match &mut self.state {
@@ -145,7 +230,7 @@ impl Application for RegApp {
                     println!("Error: trying to write register, but we are not connected")
                 }
                 SenderState::Ready(sender) => sender
-                    .try_send(WorkerInput::WriteReg(0x3, self.write_reg_value))
+                    .try_send(WorkerInput::WriteReg(address, self.reg_map.get(&address).unwrap().write_value))
                     .expect("Send msg to background worker"),
             },
             Message::Echo(event) => match event {
@@ -154,15 +239,15 @@ impl Application for RegApp {
                     println!("worker Ready");
                 }
                 Event::ReadFinished(Ok((address, value))) => {
-                    self.read_reg_value = value;
+                    self.reg_map.get_mut(&address).unwrap().read_value = value;
                 }
                 Event::ReadFinished(Err(address)) => {
-                    eprintln!("update: Error while reg at address 0x{:04X}", address)
+                    eprintln!("update: Error while reading reg at address 0x{:04X}", address)
                 }
                 Event::WriteFinished(Ok((address, value))) => {
                     println!(
-                        "Write of 0x{:04X} to address 0x{:04X} finished",
-                        address, value
+                        "Write data 0x{:04X} to address 0x{:04X} finished",
+                        value, address
                     )
                 }
                 Event::WriteFinished(Err(address)) => {
@@ -181,39 +266,21 @@ impl Application for RegApp {
     }
 
     fn view(&self) -> Element<Message> {
-        let content = column![register(
-            self.read_reg_value,
-            self.write_reg_value,
-            Message::RegReadValChanged,
-            Message::RegWriteValChanged,
-            Message::RegRead,
-            Message::RegWrite,
-            "TEST_REG",
-            0x0012,
-            &[
-                Field {
-                    name: "Field A",
-                    width: 2
-                },
-                Field {
-                    name: "Field B",
-                    width: 8
-                },
-                Field {
-                    name: "Field C",
-                    width: 6
-                }
-            ]
-        ),]
-        .spacing(20.0)
-        .padding(20)
-        .max_width(600);
+        let mut content = Row::new();
 
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x()
-            .center_y()
-            .into()
+        for reg in self.reg_map.values() {
+            content = content.push(register(
+                reg.read_value,
+                reg.write_value,
+                Message::RegReadValChanged,
+                Message::RegWriteValChanged,
+                Message::RegRead,
+                Message::RegWrite,
+                reg.name,
+                reg.address,
+                reg.fields,
+            ));
+        }
+        container(content.spacing(20.0).padding(20)).into()
     }
 }
