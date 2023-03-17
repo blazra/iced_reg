@@ -1,9 +1,9 @@
 [package]
-name = "reg"
+name = "iced_reg"
 version = "0.1.0"
 authors = ["Radovan Blažek <blazra@gmail.com>"]
 edition = "2021"
 publish = false
 
 [dependencies]
-iced = { version = "0.8", features = ["glow"]}
+iced = { git = "https://github.com/iced-rs/iced.git", branch = "advanced-text", features = ["lazy"]}
