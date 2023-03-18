@@ -1,8 +1,10 @@
 use iced::theme;
 use iced::widget::{
-    button, column, component, container, row, text, vertical_space, Button, Component, Row,
+    button, column, container, row, text, vertical_space, Button, Row,
 };
 use iced::{Element, Length, Renderer};
+use iced_lazy::{component, Component};
+
 
 const WIDTH: usize = 16;
 

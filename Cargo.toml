@@ -6,4 +6,5 @@ edition = "2021"
 publish = false
 
 [dependencies]
-iced = { git = "https://github.com/iced-rs/iced.git", branch = "advanced-text", features = ["lazy"]}
+iced = { version = "0.8", features = ["glow"]}
+iced_lazy = "0.5.0"
