@@ -1,101 +1,11 @@
-use iced::theme::Theme;
-use iced::widget::{container, Row};
-use iced::{
-    executor, futures::channel::mpsc, subscription, Application, Command, Element,
-    Settings, Subscription,
-};
-use std::collections::BTreeMap;
-use std::{thread, time};
-
+use iced::{Element, Sandbox, Settings};
 use iced_reg::{register, Field};
 
 pub fn main() -> iced::Result {
-    let mut settings = Settings::default();
-    settings.window.size = (800, 600);
-    RegApp::run(settings)
+    RegApp::run(Settings::default())
 }
 
-#[derive(Debug, Clone)]
-enum Event {
-    Ready(mpsc::Sender<WorkerInput>),
-    ReadFinished(Result<(u16, u16), u16>),
-    WriteFinished(Result<(u16, u16), u16>),
-}
-
-#[derive(Debug, Clone)]
-enum WorkerInput {
-    ReadReg(u16),
-    WriteReg(u16, u16),
-}
-
-#[derive(Default)]
-enum SenderState {
-    #[default]
-    Starting,
-    Ready(mpsc::Sender<WorkerInput>),
-}
-
-#[derive(Default)]
-enum ReceiverState {
-    #[default]
-    Disconnected,
-    Ready(mpsc::Receiver<WorkerInput>),
-}
-
-fn bg_worker() -> Subscription<Event> {
-    struct SomeWorker;
-
-    subscription::unfold(
-        std::any::TypeId::of::<SomeWorker>(),
-        ReceiverState::Disconnected,
-        |state| async move {
-            match state {
-                ReceiverState::Disconnected => {
-                    // Create channel
-                    let (sender, receiver) = mpsc::channel(100);
-
-                    (Some(Event::Ready(sender)), ReceiverState::Ready(receiver))
-                }
-                ReceiverState::Ready(mut receiver) => {
-                    use iced::futures::StreamExt;
-
-                    // Read next input sent from `Application`
-                    let input = receiver.select_next_some().await;
-
-                    match input {
-                        WorkerInput::ReadReg(address) => {
-                            println!("bg worker: -> R @0x{:04X}", address);
-                            thread::sleep(time::Duration::from_secs(1)); // Simulate transfer
-                            let value = 0x5AA5;
-                            println!("bg worker: <- R @0x{:04X} 0x{:04X}", address, value);
-
-                            // Finally, we can optionally return a message to tell the
-                            // `Application` the work is done
-                            (
-                                Some(Event::ReadFinished(Ok((address, value)))),
-                                ReceiverState::Ready(receiver),
-                            )
-                        }
-                        WorkerInput::WriteReg(address, value) => {
-                            println!("bg worker: -> W @0x{:04X} 0x{:04X}", address, value);
-                            thread::sleep(time::Duration::from_secs(1)); // Simulate transfer
-                            println!("bg worker: <- W @0x{:04X} 0x{:04X}", address, value);
-
-                            // Finally, we can optionally return a message to tell the
-                            // `Application` the work is done
-                            (
-                                Some(Event::WriteFinished(Ok((address, value)))),
-                                ReceiverState::Ready(receiver),
-                            )
-                        }
-                    }
-                }
-            }
-        },
-    )
-}
-
-struct Reg {
+struct RegApp {
     name: &'static str,
     address: u16,
     read_value: u16,
@@ -103,184 +13,65 @@ struct Reg {
     fields: &'static [Field],
 }
 
-struct RegApp {
-    state: SenderState,
-    reg_map: BTreeMap<u16, Reg>,
-}
-
 #[derive(Debug, Clone)]
 enum Message {
-    RegReadValChanged(u16, u16),
-    RegWriteValChanged(u16, u16),
-    RegRead(u16),
-    RegWrite(u16),
-    Echo(Event),
+    ReadValChanged(u16, u16),
+    WriteValChanged(u16, u16),
+    Read(u16),
+    Write(u16),
 }
 
-impl Application for RegApp {
+impl Sandbox for RegApp {
     type Message = Message;
-    type Executor = executor::Default;
-    type Flags = ();
-    type Theme = Theme;
 
-    fn new(_flags: ()) -> (RegApp, Command<Message>) {
-        let reg_map = BTreeMap::from([
-            (
-                0x00,
-                Reg {
-                    name: "REG_1",
-                    address: 0,
-                    read_value: 0,
-                    write_value: 0,
-                    fields: &[
-                        Field {
-                            name: "Field A",
-                            width: 8,
-                        },
-                        Field {
-                            name: "Field B",
-                            width: 8,
-                        },
-                    ],
+    fn new() -> Self {
+        RegApp {
+            name: "REG_NAME",
+            address: 0x00AD,
+            read_value: 0x5AA5,
+            write_value: 0x00A0,
+            fields: &[
+                Field {
+                    name: "Field A",
+                    width: 8,
                 },
-            ),
-            (
-                0x01,
-                Reg {
-                    name: "REG_2",
-                    address: 1,
-                    read_value: 0,
-                    write_value: 0,
-                    fields: &[
-                        Field {
-                            name: "Field A",
-                            width: 8,
-                        },
-                        Field {
-                            name: "Field B",
-                            width: 8,
-                        },
-                    ],
+                Field {
+                    name: "Field B",
+                    width: 7,
                 },
-            ),
-            (
-                0x02,
-                Reg {
-                    name: "REG_3",
-                    address: 2,
-                    read_value: 0,
-                    write_value: 0,
-                    fields: &[
-                        Field {
-                            name: "Field A",
-                            width: 8,
-                        },
-                        Field {
-                            name: "Field B",
-                            width: 8,
-                        },
-                    ],
+                Field {
+                    name: "Field C",
+                    width: 1,
                 },
-            ),
-            (
-                0x03,
-                Reg {
-                    name: "REG_4",
-                    address: 3,
-                    read_value: 0,
-                    write_value: 0,
-                    fields: &[
-                        Field {
-                            name: "Field A",
-                            width: 8,
-                        },
-                        Field {
-                            name: "Field B",
-                            width: 8,
-                        },
-                    ],
-                },
-            ),
-        ]);
-        let reg = RegApp {
-            state: SenderState::default(),
-            reg_map,
-        };
-        (reg, Command::none())
+            ],
+        }
     }
 
     fn title(&self) -> String {
         String::from("Iced register widget")
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message) {
         match message {
-            Message::RegReadValChanged(address, value) => self.reg_map.get_mut(&address).unwrap().read_value = value,
-            Message::RegWriteValChanged(address, value) => self.reg_map.get_mut(&address).unwrap().write_value = value,
-            Message::RegRead(address) => match &mut self.state {
-                SenderState::Starting => {
-                    println!("Error: trying to read register, but we are not connected")
-                }
-                SenderState::Ready(sender) => sender
-                    .try_send(WorkerInput::ReadReg(address))
-                    .expect("Send msg to background worker"),
-            },
-            Message::RegWrite(address) => match &mut self.state {
-                SenderState::Starting => {
-                    println!("Error: trying to write register, but we are not connected")
-                }
-                SenderState::Ready(sender) => sender
-                    .try_send(WorkerInput::WriteReg(address, self.reg_map.get(&address).unwrap().write_value))
-                    .expect("Send msg to background worker"),
-            },
-            Message::Echo(event) => match event {
-                Event::Ready(sender) => {
-                    self.state = SenderState::Ready(sender);
-                    println!("worker Ready");
-                }
-                Event::ReadFinished(Ok((address, value))) => {
-                    self.reg_map.get_mut(&address).unwrap().read_value = value;
-                }
-                Event::ReadFinished(Err(address)) => {
-                    eprintln!("update: Error while reading reg at address 0x{:04X}", address)
-                }
-                Event::WriteFinished(Ok((address, value))) => {
-                    println!(
-                        "Write data 0x{:04X} to address 0x{:04X} finished",
-                        value, address
-                    )
-                }
-                Event::WriteFinished(Err(address)) => {
-                    eprintln!(
-                        "update: Error while writing reg at address 0x{:04X}",
-                        address
-                    )
-                }
-            },
+            Message::ReadValChanged(_address, value) => self.read_value = value,
+            Message::WriteValChanged(_address, value) => self.write_value = value,
+            Message::Read(address) => println!("Read register at address 0x{:04X}", address),
+            Message::Write(address) => println!("Write to register at address 0x{:04X}", address),
         }
-        Command::none()
-    }
-
-    fn subscription(&self) -> Subscription<Message> {
-        bg_worker().map(Message::Echo)
     }
 
     fn view(&self) -> Element<Message> {
-        let mut content = Row::new();
-
-        for reg in self.reg_map.values() {
-            content = content.push(register(
-                reg.read_value,
-                reg.write_value,
-                Message::RegReadValChanged,
-                Message::RegWriteValChanged,
-                Message::RegRead,
-                Message::RegWrite,
-                reg.name,
-                reg.address,
-                reg.fields,
-            ));
-        }
-        container(content.spacing(20.0).padding(20)).into()
+        register(
+            self.read_value,
+            self.write_value,
+            Message::ReadValChanged,
+            Message::WriteValChanged,
+            Message::Read,
+            Message::Write,
+            self.name,
+            self.address,
+            self.fields,
+        )
+        .into()
     }
 }
