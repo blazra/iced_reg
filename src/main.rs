@@ -1,4 +1,4 @@
-use iced::{Element, Sandbox, Settings};
+use iced::{Element, Sandbox, Settings, Theme};
 use iced_reg::{register, Field};
 
 pub fn main() -> iced::Result {
@@ -32,15 +32,27 @@ impl Sandbox for RegApp {
             write_value: 0x00A0,
             fields: &[
                 Field {
-                    name: "Field A",
-                    width: 8,
+                    name: "A",
+                    width: 1,
                 },
                 Field {
-                    name: "Field B",
-                    width: 7,
+                    name: "B",
+                    width: 2,
                 },
                 Field {
-                    name: "Field C",
+                    name: "C",
+                    width: 3,
+                },
+                Field {
+                    name: "D",
+                    width: 4,
+                },
+                Field {
+                    name: "E",
+                    width: 5,
+                },
+                Field {
+                    name: "F",
                     width: 1,
                 },
             ],
@@ -55,8 +67,11 @@ impl Sandbox for RegApp {
         match message {
             Message::ReadValChanged(_address, value) => self.read_value = value,
             Message::WriteValChanged(_address, value) => self.write_value = value,
-            Message::Read(address) => println!("Read register at address 0x{:04X}", address),
-            Message::Write(address) => println!("Write to register at address 0x{:04X}", address),
+            Message::Read(address) => {
+                println!("Reading register at address 0x{:04X}", address);
+                self.read_value = 0xBEEF;
+            }
+            Message::Write(address) => println!("Writing 0x{:04X} to register at address 0x{:04X}", self.write_value, address),
         }
     }
 
@@ -73,5 +88,9 @@ impl Sandbox for RegApp {
             self.fields,
         )
         .into()
+    }
+
+    fn theme(&self) -> Theme {
+        Theme::Dark
     }
 }
